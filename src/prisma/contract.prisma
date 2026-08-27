@@ -1,0 +1,184 @@
+// ─── Enums ───────────────────────────────────────────────────────────────────
+
+enum Role {
+  @@type("pg/text@1")
+  OWNER = "OWNER"
+  CASHIER = "CASHIER"
+}
+
+enum StockChangeType {
+  @@type("pg/text@1")
+  SALE = "SALE"
+  RESTOCK = "RESTOCK"
+  ADJUSTMENT = "ADJUSTMENT"
+  RETURN = "RETURN"
+}
+
+enum SaleStatus {
+  @@type("pg/text@1")
+  COMPLETED = "COMPLETED"
+  REFUNDED = "REFUNDED"
+  PARTIAL_REFUND = "PARTIAL_REFUND"
+}
+
+enum OrderStatus {
+  @@type("pg/text@1")
+  PENDING = "PENDING"
+  ORDERED = "ORDERED"
+  SHIPPED = "SHIPPED"
+  RECEIVED = "RECEIVED"
+  CANCELLED = "CANCELLED"
+}
+
+// ─── Shared type aliases ───────────────────────────────────────────────────
+
+types {
+  Money = Decimal
+}
+
+// ─── Users ───────────────────────────────────────────────────────────────────
+
+model User {
+  id           String   @id @default(uuid())
+  name         String
+  email        String   @unique
+  passwordHash String
+  role         Role     @default(CASHIER)
+  isActive     Boolean  @default(true)
+  createdAt    TimestamptzString @default(now())
+  updatedAt    temporal.updatedAtString()
+
+  sales     Sale[]
+  stockLogs StockLog[]
+
+  @@map("users")
+}
+
+// ─── Categories ───────────────────────────────────────────────────────────────
+
+model Category {
+  id        String   @id @default(uuid())
+  name      String   @unique
+  isActive  Boolean  @default(true)
+  createdAt TimestamptzString @default(now())
+  updatedAt temporal.updatedAtString()
+
+  subCategories SubCategory[]
+  products      Product[]
+
+  @@map("categories")
+}
+
+model SubCategory {
+  id         String   @id @default(uuid())
+  name       String
+  categoryId String
+  isActive   Boolean  @default(true)
+  createdAt  TimestamptzString @default(now())
+  updatedAt  temporal.updatedAtString()
+
+  category Category  @relation(fields: [categoryId], references: [id])
+  products Product[]
+
+  @@unique([name, categoryId])
+  @@map("sub_categories")
+}
+
+// ─── Products ─────────────────────────────────────────────────────────────────
+
+model Product {
+  id                String   @id @default(uuid())
+  name              String
+  sku               String   @unique
+  categoryId        String
+  subCategoryId     String?
+  brand             String?
+  description       String?
+  buyingPrice       Money
+  sellingPrice      Money
+  quantity          Int      @default(0)
+  lowStockThreshold Int      @default(5)
+  unit              String   @default("Piece")
+  imageUrl          String?
+  isActive          Boolean  @default(true)
+  createdAt         TimestamptzString @default(now())
+  updatedAt         temporal.updatedAtString()
+
+  category    Category     @relation(fields: [categoryId], references: [id])
+  subCategory SubCategory? @relation(fields: [subCategoryId], references: [id])
+  saleItems   SaleItem[]
+  stockLogs   StockLog[]
+
+  @@map("products")
+}
+
+// ─── Sales ────────────────────────────────────────────────────────────────────
+
+model Sale {
+  id             String     @id @default(uuid())
+  billId         String     @unique
+  totalAmount    Money
+  discount       Money      @default("0")
+  netPayable     Money
+  amountReceived Money
+  changeReturned Money
+  status         SaleStatus @default(COMPLETED)
+  userId         String?
+  createdAt      TimestamptzString @default(now())
+  updatedAt      temporal.updatedAtString()
+
+  user      User?      @relation(fields: [userId], references: [id])
+  saleItems SaleItem[]
+
+  @@map("sales")
+}
+
+model SaleItem {
+  id          String @id @default(uuid())
+  saleId      String
+  productId   String
+  productName String
+  unitPrice   Money
+  quantity    Int
+  subtotal    Money
+
+  sale    Sale    @relation(fields: [saleId], references: [id], onDelete: Cascade)
+  product Product @relation(fields: [productId], references: [id])
+
+  @@map("sale_items")
+}
+
+// ─── Stock Logs ───────────────────────────────────────────────────────────────
+
+model StockLog {
+  id             String          @id @default(uuid())
+  productId      String
+  changeType     StockChangeType
+  quantityChange Int
+  previousQty    Int
+  newQty         Int
+  notes          String?
+  userId         String?
+  createdAt      TimestamptzString @default(now())
+
+  product Product @relation(fields: [productId], references: [id])
+  user    User?   @relation(fields: [userId], references: [id])
+
+  @@map("stock_logs")
+}
+
+// ─── Shop Settings ────────────────────────────────────────────────────────────
+
+model ShopSettings {
+  id            String        @id @default(uuid())
+  shopName      String        @default("My Shop")
+  address       String?
+  phone         String?
+  logoUrl       String?
+  receiptFormat String        @default("A4")
+  taxRate       Decimal       @default("0")
+  taxMode       String        @default("none")
+  currency      String        @default("PKR")
+
+  @@map("shop_settings")
+}
